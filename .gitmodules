@@ -1,3 +1,0 @@
-[submodule "dev-db/lazysql/lazysql"]
-	path = dev-db/lazysql/lazysql
-	url = https://github.com/jorgerojas26/lazysql
