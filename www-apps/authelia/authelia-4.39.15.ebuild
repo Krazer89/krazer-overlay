@@ -3,53 +3,42 @@
 
 EAPI=8
 
-inherit go-module
+inherit systemd
 
 DESCRIPTION="An open-source authentication and authorization server"
 HOMEPAGE="https://www.authelia.com https://github.com/authelia/authelia"
-SRC_URI="
-	https://github.com/authelia/authelia/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz
-	https://github.com/authelia/authelia/releases/download/v${PV}/authelia-v${PV}-public_html.tar.gz
-"
+SRC_URI="https://github.com/authelia/authelia/releases/download/v${PV}/authelia-v${PV}-linux-amd64.tar.gz"
 
 LICENSE="Apache-2.0"
 SLOT="0"
 KEYWORDS="amd64 arm64"
 
-DEPEND=">=dev-lang/go-1.20"
 RDEPEND="
-	${DEPEND}
 	acct-group/authelia
 	acct-user/authelia
 "
 
-RESTRICT="test"
-
-S="${WORKDIR}/${PN}-${PV}"
-
-src_prepare() {
-	default
-	# Extract and install prebuilt public_html
-	mkdir -p "internal/server/public_html/api"
-	tar -xzf "${DISTDIR}/authelia-v${PV}-public_html.tar.gz" -C "internal/server/public_html/"
-}
-
-src_compile() {
-	# Download Go modules
-	ego mod download
-
-	# Build with security hardening flags
-	ego build \
-		-ldflags "-linkmode=external -s -w" \
-		-trimpath \
-		-buildmode=pie \
-		-o authelia \
-		./cmd/authelia
-}
+S="${WORKDIR}"
 
 src_install() {
 	dobin authelia
+
+	# Install systemd service files
+	systemd_dounit authelia.service authelia@.service
+
+	# Install sysusers config
+	insinto /usr/lib/sysusers.d
+	doins authelia.sysusers.conf
+
+	# Install tmpfiles configs
+	insinto /usr/lib/tmpfiles.d
+	doins authelia.tmpfiles.conf authelia.tmpfiles.config.conf
+
+	# Install example config
+	insinto /etc/authelia
+	newins config.template.yml configuration.example.yml
+
+	# Create data directory
 	diropts -o authelia -g authelia -m 0750
 	dodir /var/lib/authelia
-	einstalldocs
 }
