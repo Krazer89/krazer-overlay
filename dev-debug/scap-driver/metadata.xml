@@ -1,0 +1,8 @@
+<pkgmetadata>
+	<maintainer type="person">
+		<email>jamie@krazer.one</email>
+	</maintainer>
+	<upstream>
+		<remote-id type="github">falcosecurity/libs</remote-id>
+	</upstream>
+</pkgmetadata>

@@ -8,19 +8,19 @@ inherit cmake
 DESCRIPTION="Re-Connectable secure remote shell"
 HOMEPAGE="https://eternalterminal.dev"
 if [[ ${PV} == "9999" ]] ; then
-   inherit git-r3
-   EGIT_REPO_URI="https://github.com/MisterTea/${PN}.git"
-   KEYWORDS=""
+	inherit git-r3
+	EGIT_REPO_URI="https://github.com/MisterTea/${PN}.git"
+	KEYWORDS=""
 else
-   SRC_URI="https://github.com/MisterTea/EternalTerminal/archive/refs/tags/et-v${PV}.tar.gz -> ${P}.tar.gz"
-   S=${WORKDIR}/EternalTerminal-et-v${PV} 
-   KEYWORDS="~amd64 ~x86 ~arm64"
+	SRC_URI="https://github.com/MisterTea/EternalTerminal/archive/refs/tags/et-v${PV}.tar.gz -> ${P}.tar.gz"
+	S="${WORKDIR}/EternalTerminal-et-v${PV}"
+	KEYWORDS="~amd64 ~arm64 ~x86"
 fi
 
 LICENSE="Apache-2.0"
 SLOT="0"
 
-IUSE="-telemetry -sentry -coverage -crash_log"
+IUSE="sentry telemetry"
 
 RDEPEND="dev-cpp/gflags
 	dev-libs/boost
@@ -44,4 +44,3 @@ src_configure() {
 
 	cmake_src_configure
 }
-

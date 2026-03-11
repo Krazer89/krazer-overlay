@@ -1,0 +1,8 @@
+<pkgmetadata>
+    <maintainer type="person">
+        <email>jamie@krazer.one</email>
+    </maintainer>
+    <use>
+        <flag name="fuse">Enable image mount support via fuse</flag>
+    </use>
+</pkgmetadata>
