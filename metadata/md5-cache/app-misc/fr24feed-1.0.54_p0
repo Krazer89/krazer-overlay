@@ -8,4 +8,4 @@ RDEPEND=net-wireless/dump1090
 RESTRICT=bindist mirror
 SLOT=0
 SRC_URI=amd64? ( https://repo-feed.flightradar24.com/linux_binaries/fr24feed_1.0.54-0_amd64.tgz ) x86? ( https://repo-feed.flightradar24.com/linux_binaries/fr24feed_1.0.54-0_i386.tgz )
-_md5_=4f0c72dbad9e855f3bcdc56ddb4f81bf
+_md5_=303ea50ded975eb2476f6bdf15d71a67
