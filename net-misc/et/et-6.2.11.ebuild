@@ -20,7 +20,7 @@ fi
 LICENSE="Apache-2.0"
 SLOT="0"
 
-IUSE="sentry telemetry"
+IUSE="coverage crash_log sentry telemetry"
 
 RDEPEND="dev-cpp/gflags
 	dev-libs/boost
