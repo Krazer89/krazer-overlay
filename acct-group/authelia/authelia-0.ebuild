@@ -7,3 +7,5 @@ inherit acct-group
 
 DESCRIPTION="Group for authelia"
 ACCT_GROUP_ID="-1"
+
+acct-group_add_deps
