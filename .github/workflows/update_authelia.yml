@@ -1,0 +1,104 @@
+name: Bump Authelia Version
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Get latest Authelia release
+        id: latest
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/authelia/authelia/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          echo "version=${LATEST}" >> $GITHUB_OUTPUT
+
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT=$(ls www-apps/authelia/authelia-*.ebuild 2>/dev/null | sed 's|.*authelia-\([^/]*\)\.ebuild|\1|' | sort -V | tail -1)
+          echo "version=${CURRENT}" >> $GITHUB_OUTPUT
+
+      - name: Check if update needed
+        id: compare
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          CURRENT="${{ steps.current.outputs.version }}"
+          if [ -z "$CURRENT" ] || [ "$(printf '%s\n' "$CURRENT" "$LATEST" | sort -V | head -1)" = "$CURRENT" ] && [ "$LATEST" != "$CURRENT" ]; then
+            echo "needed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download tarball and calculate checksums
+        if: steps.compare.outputs.needed == 'true'
+        id: checksums
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          cd /tmp
+          wget -q "https://github.com/authelia/authelia/releases/download/v${LATEST}/authelia-v${LATEST}-linux-amd64.tar.gz"
+          echo "sha256=$(sha256sum authelia-v${LATEST}-linux-amd64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "sha512=$(sha512sum authelia-v${LATEST}-linux-amd64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "size=$(stat -c%s authelia-v${LATEST}-linux-amd64.tar.gz)" >> $GITHUB_OUTPUT
+
+      - name: Update ebuild and manifest
+        if: steps.compare.outputs.needed == 'true'
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.latest.outputs.version }}"
+          LATEST_FILE="www-apps/authelia/authelia-${LATEST}.ebuild"
+          
+          # Copy from most recent existing ebuild
+          if [ -n "$CURRENT" ]; then
+            cp "www-apps/authelia/authelia-${CURRENT}.ebuild" "$LATEST_FILE"
+          else
+            cp www-apps/authelia/authelia-*.ebuild "$LATEST_FILE" 2>/dev/null || exit 1
+          fi
+          
+          # Keep only last 5 versions and update manifest
+          cd www-apps/authelia
+          MANIFEST="Manifest"
+          
+          # Get list of current ebuilds sorted by version (newest first)
+          VERSIONS=$(ls authelia-*.ebuild 2>/dev/null | sed 's/authelia-\(.*\)\.ebuild/\1/' | sort -rV)
+          
+          # Keep top 5 versions, delete the rest
+          echo "$VERSIONS" | tail -n +6 | while read v; do
+            rm -f "authelia-${v}.ebuild"
+            # Remove old version from manifest
+            sed -i "/authelia-v${v}-linux-amd64/d" "$MANIFEST"
+          done
+          
+          # Create new manifest with kept versions
+          KEPT_VERSIONS=$(ls authelia-*.ebuild 2>/dev/null | sed 's/authelia-\(.*\)\.ebuild/\1/' | sort -rV | head -5)
+          
+          # Build manifest: keep old entries for versions with ebuilds, update latest
+          temp_manifest=$(mktemp)
+          for v in $KEPT_VERSIONS; do
+            if [ "$v" = "$LATEST" ]; then
+              echo "DIST authelia-v${v}-linux-amd64.tar.gz ${{ steps.checksums.outputs.size }} SHA256 ${{ steps.checksums.outputs.sha256 }} SHA512 ${{ steps.checksums.outputs.sha512 }}" >> "$temp_manifest"
+            else
+              # Keep existing manifest entry for old versions
+              grep "authelia-v${v}-linux-amd64" "$MANIFEST" >> "$temp_manifest" 2>/dev/null || true
+            fi
+          done
+          mv "$temp_manifest" "$MANIFEST"
+          cd - > /dev/null
+
+      - name: Commit and push changes
+        if: steps.compare.outputs.needed == 'true'
+        run: |
+          git add www-apps/authelia/
+          git commit -m "www-apps/authelia: bump to v${{ steps.latest.outputs.version }}"
+          git push origin HEAD:${{ github.ref }}
