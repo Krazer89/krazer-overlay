@@ -1,0 +1,104 @@
+name: Bump Authelia Version
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest Authelia release
+        id: latest
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/authelia/authelia/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          echo "version=${LATEST}" >> $GITHUB_OUTPUT
+          echo "Latest version: ${LATEST}"
+
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT=$(grep -oP 'authelia-\K[\d.]+(?=\.ebuild)' www-apps/authelia/*.ebuild | head -1)
+          echo "version=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "Current version: ${CURRENT}"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          CURRENT="${{ steps.current.outputs.version }}"
+          if [ "$(printf '%s\n' "$CURRENT" "$LATEST" | sort -V | head -n1)" = "$CURRENT" ] && [ "$LATEST" != "$CURRENT" ]; then
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+          else
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download and calculate checksums
+        if: steps.compare.outputs.needs_update == 'true'
+        id: checksums
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          cd /tmp
+          wget -q "https://github.com/authelia/authelia/releases/download/v${LATEST}/authelia-v${LATEST}-linux-amd64.tar.gz"
+          SHA256=$(sha256sum "authelia-v${LATEST}-linux-amd64.tar.gz" | awk '{print $1}')
+          SHA512=$(sha512sum "authelia-v${LATEST}-linux-amd64.tar.gz" | awk '{print $1}')
+          SIZE=$(stat -c%s "authelia-v${LATEST}-linux-amd64.tar.gz")
+          echo "sha256=${SHA256}" >> $GITHUB_OUTPUT
+          echo "sha512=${SHA512}" >> $GITHUB_OUTPUT
+          echo "size=${SIZE}" >> $GITHUB_OUTPUT
+
+      - name: Update ebuild
+        if: steps.compare.outputs.needs_update == 'true'
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.latest.outputs.version }}"
+          CURRENT_FILE="www-apps/authelia/authelia-${CURRENT}.ebuild"
+          LATEST_FILE="www-apps/authelia/authelia-${LATEST}.ebuild"
+          
+          # Rename ebuild file if needed
+          if [ "$CURRENT" != "$LATEST" ] && [ -f "$CURRENT_FILE" ]; then
+            mv "$CURRENT_FILE" "$LATEST_FILE"
+          fi
+
+      - name: Update Manifest
+        if: steps.compare.outputs.needs_update == 'true'
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          SHA256="${{ steps.checksums.outputs.sha256 }}"
+          SHA512="${{ steps.checksums.outputs.sha512 }}"
+          SIZE="${{ steps.checksums.outputs.size }}"
+          
+          MANIFEST="www-apps/authelia/Manifest"
+          echo "DIST authelia-v${LATEST}-linux-amd64.tar.gz ${SIZE} SHA256 ${SHA256} SHA512 ${SHA512}" > "$MANIFEST"
+
+      - name: Create Pull Request
+        if: steps.compare.outputs.needs_update == 'true'
+        id: create-pr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: "www-apps/authelia: bump to v${{ steps.latest.outputs.version }}"
+          title: "www-apps/authelia: bump to v${{ steps.latest.outputs.version }}"
+          body: |
+            Automated version bump for authelia.
+            
+            - **Latest version**: v${{ steps.latest.outputs.version }}
+            - **Previous version**: v${{ steps.current.outputs.version }}
+            - **SHA256**: `${{ steps.checksums.outputs.sha256 }}`
+            - **SHA512**: `${{ steps.checksums.outputs.sha512 }}`
+          branch: "authelia-v${{ steps.latest.outputs.version }}"
+          delete-branch: true
+
+      - name: Auto-merge Pull Request
+        if: steps.compare.outputs.needs_update == 'true' && steps.create-pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
+        run: |
+          gh pr merge ${{ env.PR_NUMBER }} --auto --squash
