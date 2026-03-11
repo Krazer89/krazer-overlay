@@ -1,11 +1,9 @@
 # Copyright 2026 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=8
+EAPI=7
 
 inherit acct-group
 
-DESCRIPTION="Group for authelia"
-ACCT_GROUP_ID="-1"
-
-acct-group_add_deps
+DESCRIPTION="Group for Suricata IDS"
+ACCT_GROUP_ID=-1
