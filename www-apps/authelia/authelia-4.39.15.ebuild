@@ -3,7 +3,7 @@
 
 EAPI=8
 
-inherit systemd
+inherit systemd tmpfiles
 
 DESCRIPTION="An open-source authentication and authorization server"
 HOMEPAGE="https://www.authelia.com https://github.com/authelia/authelia"
@@ -37,8 +37,8 @@ src_install() {
 	# Install example config
 	insinto /etc/authelia
 	newins config.template.yml configuration.example.yml
+}
 
-	# Create data directory
-	diropts -o authelia -g authelia -m 0750
-	dodir /var/lib/authelia
+pkg_postinst() {
+	tmpfiles_process authelia.tmpfiles.conf authelia.tmpfiles.config.conf
 }
