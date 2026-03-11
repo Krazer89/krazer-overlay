@@ -25,7 +25,7 @@ jobs:
       - name: Get current version
         id: current
         run: |
-          CURRENT=$(grep -oP 'authelia-\K[\d.]+(?=\.ebuild)' www-apps/authelia/*.ebuild | head -1)
+          CURRENT=$(ls www-apps/authelia/authelia-*.ebuild 2>/dev/null | sed 's|.*authelia-\([^/]*\)\.ebuild|\1|' | head -1)
           echo "version=${CURRENT}" >> $GITHUB_OUTPUT
           echo "Current version: ${CURRENT}"
 
@@ -59,13 +59,27 @@ jobs:
         run: |
           CURRENT="${{ steps.current.outputs.version }}"
           LATEST="${{ steps.latest.outputs.version }}"
-          CURRENT_FILE="www-apps/authelia/authelia-${CURRENT}.ebuild"
           LATEST_FILE="www-apps/authelia/authelia-${LATEST}.ebuild"
           
-          # Rename ebuild file if needed
-          if [ "$CURRENT" != "$LATEST" ] && [ -f "$CURRENT_FILE" ]; then
-            mv "$CURRENT_FILE" "$LATEST_FILE"
+          # If current version exists, rename it; otherwise create new file from template
+          if [ -n "${CURRENT}" ]; then
+            CURRENT_FILE="www-apps/authelia/authelia-${CURRENT}.ebuild"
+            if [ "${CURRENT}" != "${LATEST}" ] && [ -f "${CURRENT_FILE}" ]; then
+              mv "${CURRENT_FILE}" "${LATEST_FILE}"
+            fi
+          else
+            # Create new ebuild from scratch if none exists
+            cp www-apps/authelia/authelia-*.ebuild "${LATEST_FILE}" 2>/dev/null || echo "# If no template exists, create one manually"
           fi
+
+      - name: Keep last 5 versions
+        if: steps.compare.outputs.needs_update == 'true'
+        run: |
+          cd www-apps/authelia
+          ls authelia-*.ebuild 2>/dev/null | sed 's/authelia-\(.*\)\.ebuild/\1/' | sort -rV | tail -n +6 | while read version; do
+            rm -f "authelia-${version}.ebuild"
+            echo "Deleted authelia-${version}.ebuild"
+          done
 
       - name: Update Manifest
         if: steps.compare.outputs.needs_update == 'true'
